@@ -5,7 +5,15 @@ const SOCKET_URL = import.meta.env.DEV
   ? `${window.location.protocol}//${window.location.host}`
   : 'https://armony.onrender.com';
 
-export const useSocket = () => {
+type SocketHook = {
+  socket: Socket | null;
+  isConnected: boolean;
+  isConnecting: boolean;
+  error: string | null;
+  reconnectAttempts: number;
+};
+
+export const useSocket = (): SocketHook => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(true);
@@ -38,15 +46,3 @@ export const useSocket = () => {
       
       if (reconnectAttempts < 5) {
         setTimeout(() => {
-          setReconnectAttempts(prev => prev + 1);
-          newSocket.connect();
-        }, 1000 * Math.pow(2, reconnectAttempts));
-      }
-    });
-
-    newSocket.on('disconnect', () => {
-      setIsConnected(false);
-      setError('Disconnesso dal server');
-    });
-
-    setSocket(newSocket);
