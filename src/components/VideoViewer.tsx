@@ -1,10 +1,6 @@
-import React from 'react';
+interface VideoViewerProps {}
 
-interface VideoViewerProps {
-  isHost: boolean;
-}
-
-export const VideoViewer: React.FC<VideoViewerProps> = ({ isHost }) => {
+export const VideoViewer: React.FC<VideoViewerProps> = () => {
   return (
     <video
       id="viewer-video"
