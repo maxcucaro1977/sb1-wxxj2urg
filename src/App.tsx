@@ -12,6 +12,9 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [isMobile] = useState(() => {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  });
 
   useEffect(() => {
     socket.on('connect', () => {
@@ -54,18 +57,15 @@ function App() {
     };
   }, []);
 
-  const startScreenShare = async () => {
+  const startStream = async () => {
     try {
       setError(null);
       
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-        throw new Error('Il tuo browser non supporta la condivisione dello schermo');
-      }
+      const constraints = isMobile 
+        ? { video: { facingMode: 'environment' }, audio: false }
+        : { video: true, audio: false };
 
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: true
-      });
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       
       setIsSharing(true);
       
@@ -89,67 +89,6 @@ function App() {
     }
   };
 
-  const downloadApp = () => {
-    window.location.href = 'https://github.com/tuorepository/screen-mirror/releases/latest/download/app-release.apk';
-  };
-
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl w-full">
-        {error && (
-          <div className="mb-4 p-4 bg-red-100 text-red-700 rounded-lg">
-            {error}
-          </div>
-        )}
-        
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-gray-800">
-              {isConnected ? 'Connesso' : 'Disconnesso'}
-            </h1>
-            <div className="flex gap-2">
-              <button
-                onClick={startScreenShare}
-                disabled={!isConnected || isSharing}
-                className={`px-4 py-2 rounded-lg ${
-                  !isConnected || isSharing
-                    ? 'bg-gray-300 cursor-not-allowed'
-                    : 'bg-blue-500 hover:bg-blue-600 text-white'
-                }`}
-              >
-                {isSharing ? 'Condivisione in corso...' : 'Condividi Schermo'}
-              </button>
-              <button
-                onClick={downloadApp}
-                className="px-4 py-2 rounded-lg bg-green-500 hover:bg-green-600 text-white"
-              >
-                Scarica App Android
-              </button>
-            </div>
-          </div>
-
-          <div className="aspect-video bg-black rounded-lg overflow-hidden">
-            <video
-              id="screen-share"
-              autoPlay
-              playsInline
-              muted
-              className="w-full h-full object-contain"
-            />
-          </div>
-
-          <div className="aspect-video bg-black rounded-lg overflow-hidden">
-            <video
-              id="viewer-video"
-              autoPlay
-              playsInline
-              className="w-full h-full object-contain"
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default App;
+      <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl w-full"
