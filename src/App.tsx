@@ -4,142 +4,86 @@ import { io } from 'socket.io-client';
 const SOCKET_URL = 'https://screen-mirror-server.onrender.com';
 const socket = io(SOCKET_URL);
 
-const FIXED_ROOM_ID = '1121';
-
 function App() {
-  const [isHost, setIsHost] = useState(false);
-  const [roomId, setRoomId] = useState('');
-  const [isSharing, setIsSharing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(true);
+  const [isViewer, setIsViewer] = useState(false);
+  const [stream, setStream] = useState<MediaStream | null>(null);
 
   useEffect(() => {
-    socket.on('connect', () => {
-      setIsConnected(true);
-      setIsConnecting(false);
-      setError(null);
-    });
+    const isViewerMode = window.location.search.includes('viewer');
+    setIsViewer(isViewerMode);
 
-    socket.on('connect_error', () => {
-      setIsConnected(false);
-      setIsConnecting(false);
-      setError('Errore di connessione al server');
-    });
+    if (!isViewerMode) {
+      startStreaming();
+    }
 
-    socket.on('disconnect', () => {
-      setIsConnected(false);
-      setError('Disconnesso dal server');
-    });
-
-    socket.on('room-created', (id) => {
-      setRoomId(id);
-      setIsHost(true);
-      startMobileStream();
-    });
-
-    socket.on('joined-room', (id) => {
-      setRoomId(id);
-      setIsHost(false);
-    });
-
-    socket.on('stream-data', (stream) => {
-      if (!isHost) {
-        const videoElement = document.querySelector('#viewer-video') as HTMLVideoElement;
+    socket.on('stream-data', (streamData) => {
+      if (isViewerMode) {
+        const videoElement = document.getElementById('viewer') as HTMLVideoElement;
         if (videoElement) {
-          videoElement.srcObject = stream;
+          videoElement.srcObject = streamData;
         }
       }
     });
 
     return () => {
-      socket.off('connect');
-      socket.off('connect_error');
-      socket.off('disconnect');
-      socket.off('room-created');
-      socket.off('joined-room');
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
       socket.off('stream-data');
     };
-  }, [isHost]);
+  }, []);
 
-  const startMobileStream = async () => {
+  const startStreaming = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { 
           facingMode: 'environment',
           width: { ideal: 1280 },
-          height: { ideal: 720 },
-          frameRate: { ideal: 30 }
+          height: { ideal: 720 }
         }
       });
       
-      setIsSharing(true);
+      setStream(mediaStream);
       
-      const videoElement = document.createElement('video');
-      videoElement.srcObject = stream;
-      videoElement.autoplay = true;
-      videoElement.playsInline = true;
-      videoElement.className = 'w-full rounded-lg';
-      
-      const container = document.getElementById('screen-share-container');
-      if (container) {
-        container.innerHTML = '';
-        container.appendChild(videoElement);
+      const videoElement = document.getElementById('streamer') as HTMLVideoElement;
+      if (videoElement) {
+        videoElement.srcObject = mediaStream;
       }
 
-      socket.emit('stream-data', { roomId: FIXED_ROOM_ID, stream });
-      
-      stream.getTracks()[0].onended = () => {
-        setIsSharing(false);
-        if (container) {
-          container.innerHTML = '';
-        }
-      };
-    } catch (err) {
-      console.error('Errore:', err);
-      setError('Impossibile accedere alla fotocamera');
-      setIsSharing(false);
+      socket.emit('stream-data', { stream: mediaStream });
+    } catch (error) {
+      console.error('Errore accesso fotocamera:', error);
     }
   };
 
-  const createRoom = () => {
-    if (!isConnected) {
-      setError('Non connesso al server');
-      return;
-    }
-    socket.emit('create-room');
-  };
-
-  const joinRoom = () => {
-    if (!isConnected) {
-      setError('Non connesso al server');
-      return;
-    }
-    socket.emit('join-room', FIXED_ROOM_ID);
-  };
+  if (isViewer) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+        <video
+          id="viewer"
+          autoPlay
+          playsInline
+          className="w-full max-w-2xl rounded-lg shadow-lg"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
       <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl w-full">
-        <h1 className="text-2xl font-bold text-center mb-6">Screen Mirror</h1>
-        
-        <div className={`mb-4 p-4 rounded-lg ${
-          isConnecting ? 'bg-yellow-100 text-yellow-700' :
-          isConnected ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-        }`}>
-          {isConnecting ? 'Connessione al server in corso...' :
-           isConnected ? 'Connesso al server' : 'Non connesso al server'}
-        </div>
+        <video
+          id="streamer"
+          autoPlay
+          playsInline
+          className="w-full rounded-lg"
+        />
+        <p className="mt-4 text-center">
+          Link per visualizzare: {window.location.origin}?viewer
+        </p>
+      </div>
+    </div>
+  );
+}
 
-        {error && (
-          <div className="mb-4 p-4 bg-red-100 text-red-700 rounded-lg">
-            {error}
-          </div>
-        )}
-
-        {!roomId && (
-          <div className="space-y-4">
-            <button
-              onClick={createRoom}
-              disabled={!isConnected}
-              className={`w-full py-3 px-4 rounded-lg text-white font-medium ${
+export default App;
