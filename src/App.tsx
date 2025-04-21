@@ -12,6 +12,9 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [isMobile] = useState(() => {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  });
 
   useEffect(() => {
     socket.on('connect', () => {
@@ -32,10 +35,17 @@ function App() {
       console.log('Disconnesso dal server');
     });
 
-    socket.on('stream-data', (stream) => {
-      const videoElement = document.querySelector('#viewer-video') as HTMLVideoElement;
-      if (videoElement) {
-        videoElement.srcObject = stream;
+    socket.on('stream-data', async (data) => {
+      try {
+        const videoElement = document.querySelector('#viewer-video') as HTMLVideoElement;
+        if (videoElement) {
+          const stream = new MediaStream();
+          stream.addTrack(data.track);
+          videoElement.srcObject = stream;
+          await videoElement.play();
+        }
+      } catch (err) {
+        console.error('Errore nella riproduzione dello stream:', err);
       }
     });
 
@@ -47,18 +57,15 @@ function App() {
     };
   }, []);
 
-  const startScreenShare = async () => {
+  const startStream = async () => {
     try {
       setError(null);
       
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-        throw new Error('Il tuo browser non supporta la condivisione dello schermo');
-      }
+      const constraints = isMobile 
+        ? { video: { facingMode: 'environment' }, audio: false }
+        : { video: true, audio: false };
 
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: false
-      });
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       
       setIsSharing(true);
       
@@ -67,9 +74,10 @@ function App() {
         videoElement.srcObject = stream;
       }
 
-      socket.emit('stream-data', { stream });
+      const videoTrack = stream.getVideoTracks()[0];
+      socket.emit('stream-data', { track: videoTrack });
       
-      stream.getVideoTracks()[0].onended = () => {
+      videoTrack.onended = () => {
         setIsSharing(false);
         if (videoElement) {
           videoElement.srcObject = null;
@@ -83,59 +91,4 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl w-full">
-        <h1 className="text-2xl font-bold text-center mb-6">Screen Mirror</h1>
-        
-        <div className={`mb-4 p-4 rounded-lg ${
-          isConnected ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-        }`}>
-          {isConnected ? 'Connesso al server' : 'Non connesso al server'}
-        </div>
-
-        {error && (
-          <div className="mb-4 p-4 bg-red-100 text-red-700 rounded-lg">
-            {error}
-          </div>
-        )}
-
-        <div className="space-y-4">
-          <button
-            onClick={startScreenShare}
-            disabled={isSharing || !isConnected}
-            className={`w-full py-3 px-4 rounded-lg text-white font-medium ${
-              isSharing || !isConnected
-                ? 'bg-gray-400 cursor-not-allowed' 
-                : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800'
-            }`}
-          >
-            {isSharing ? 'Condivisione in corso...' : 'Condividi Schermo'}
-          </button>
-
-          <button
-            onClick={() => {
-              const video = document.querySelector('#viewer-video') as HTMLVideoElement;
-              if (video) {
-                video.style.display = video.style.display === 'none' ? 'block' : 'none';
-              }
-            }}
-            disabled={!isConnected}
-            className={`w-full py-3 px-4 rounded-lg text-white font-medium ${
-              !isConnected 
-                ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-green-600 hover:bg-green-700'
-            }`}
-          >
-            Guarda Condivisione
-          </button>
-        </div>
-        
-        <div className="mt-6">
-          <video id="screen-share" autoPlay playsInline className="w-full rounded-lg" />
-          <video id="viewer-video" autoPlay playsInline className="w-full rounded-lg" style={{display: 'none'}} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default App;
+      <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl w-full"
