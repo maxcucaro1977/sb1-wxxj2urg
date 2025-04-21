@@ -13,14 +13,14 @@ const server = createServer(app);
 // Configurazione più robusta per Socket.IO
 const io = new Server(server, {
   cors: {
-    origin: true,
+    origin: "*",
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: false
   },
   pingTimeout: 60000,
   pingInterval: 25000,
-  transports: ['websocket', 'polling'],
+  transports: ['websocket'],
   allowEIO3: true
 });
 
