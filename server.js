@@ -48,23 +48,3 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('stream-data', (data) => {
-    socket.broadcast.to(FIXED_ROOM_ID).emit('stream-data', data.stream);
-  });
-
-  socket.on('disconnect', () => {
-    console.log('Client disconnesso:', socket.id);
-    if (socket.id === hostSocket) {
-      hostSocket = null;
-      permanentRoom.active = false;
-      io.to(FIXED_ROOM_ID).emit('host-disconnected');
-      console.log('Host disconnesso dalla stanza permanente');
-    }
-  });
-});
-
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`Server avviato sulla porta ${PORT}`);
-  console.log(`Stanza permanente creata con ID: ${FIXED_ROOM_ID}`);
-});
