@@ -49,4 +49,3 @@ function App() {
           isConnecting={isConnecting}
           isConnected={isConnected}
           reconnectAttempts={reconnectAttempts}
-        />
