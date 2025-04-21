@@ -9,11 +9,18 @@ const __dirname = dirname(__filename);
 
 const app = express();
 const server = createServer(app);
+
+// Configurazione più robusta per Socket.IO
 const io = new Server(server, {
   cors: {
     origin: "*",
-    methods: ["GET", "POST"]
-  }
+    methods: ["GET", "POST"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true
+  },
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  transports: ['websocket', 'polling']
 });
 
 // Serve i file statici dalla cartella dist
@@ -63,6 +70,11 @@ io.on('connection', (socket) => {
       io.to(FIXED_ROOM_ID).emit('host-disconnected');
       console.log('Host disconnesso dalla stanza permanente');
     }
+  });
+
+  // Gestione errori del socket
+  socket.on('error', (error) => {
+    console.error('Errore socket:', error);
   });
 });
 
