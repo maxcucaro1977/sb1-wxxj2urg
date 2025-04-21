@@ -6,10 +6,10 @@ const SOCKET_URL = import.meta.env.DEV
   : 'https://armony.onrender.com'; // Production server
 
 const socket = io(SOCKET_URL, {
-  transports: ['websocket', 'polling'], // Try WebSocket first, fallback to polling
-  reconnectionAttempts: 5, // Number of reconnection attempts
-  reconnectionDelay: 1000, // Time between reconnection attempts (ms)
-  timeout: 10000 // Connection timeout in milliseconds
+  transports: ['websocket', 'polling'],
+  reconnectionAttempts: 5,
+  reconnectionDelay: 1000,
+  timeout: 10000
 });
 
 const FIXED_ROOM_ID = '1121';
@@ -21,6 +21,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(true);
+  const [stream, setStream] = useState<MediaStream | null>(null);
 
   useEffect(() => {
     socket.on('connect', () => {
@@ -60,11 +61,13 @@ function App() {
       console.log('Host non trovato');
     });
 
-    socket.on('stream-data', (stream) => {
+    socket.on('stream-data', (streamData) => {
       if (!isHost) {
         const videoElement = document.querySelector('#viewer-video') as HTMLVideoElement;
         if (videoElement) {
-          videoElement.srcObject = stream;
+          const blob = new Blob([streamData], { type: 'video/webm' });
+          videoElement.src = URL.createObjectURL(blob);
+          videoElement.play().catch(console.error);
         }
       }
     });
@@ -77,8 +80,11 @@ function App() {
       socket.off('joined-room');
       socket.off('room-not-found');
       socket.off('stream-data');
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
     };
-  }, [isHost]);
+  }, [isHost, stream]);
 
   const createRoom = () => {
     if (!isConnected) {
@@ -106,15 +112,16 @@ function App() {
         throw new Error('Il tuo browser non supporta la condivisione dello schermo');
       }
 
-      const stream = await navigator.mediaDevices.getDisplayMedia({
+      const mediaStream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
         audio: false
       });
       
+      setStream(mediaStream);
       setIsSharing(true);
       
       const videoElement = document.createElement('video');
-      videoElement.srcObject = stream;
+      videoElement.srcObject = mediaStream;
       videoElement.autoplay = true;
       videoElement.className = 'w-full rounded-lg';
       
@@ -124,10 +131,22 @@ function App() {
         container.appendChild(videoElement);
       }
 
-      socket.emit('stream-data', { roomId: FIXED_ROOM_ID, stream });
-      
-      stream.getVideoTracks()[0].onended = () => {
+      const mediaRecorder = new MediaRecorder(mediaStream, {
+        mimeType: 'video/webm;codecs=vp8,opus'
+      });
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          socket.emit('stream-data', { roomId: FIXED_ROOM_ID, stream: event.data });
+        }
+      };
+
+      mediaRecorder.start(100); // Invia chunks ogni 100ms
+
+      mediaStream.getVideoTracks()[0].onended = () => {
+        mediaRecorder.stop();
         setIsSharing(false);
+        setStream(null);
         if (container) {
           container.innerHTML = '';
         }
@@ -151,77 +170,3 @@ function App() {
           {isConnecting ? 'Connessione al server in corso...' :
            isConnected ? 'Connesso al server' : 'Non connesso al server'}
         </div>
-
-        {error && (
-          <div className="mb-4 p-4 bg-red-100 text-red-700 rounded-lg">
-            {error}
-          </div>
-        )}
-
-        {!roomId && (
-          <div className="space-y-4">
-            <button
-              onClick={createRoom}
-              disabled={!isConnected}
-              className={`w-full py-3 px-4 rounded-lg text-white font-medium ${
-                isConnected ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800' : 'bg-gray-400 cursor-not-allowed'
-              }`}
-            >
-              Diventa Host
-            </button>
-            
-            <div className="flex space-x-2">
-              <button
-                onClick={joinRoom}
-                disabled={!isConnected}
-                className={`w-full py-2 px-4 rounded-lg text-white font-medium ${
-                  isConnected ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-400 cursor-not-allowed'
-                }`}
-              >
-                Unisciti come Spettatore
-              </button>
-            </div>
-          </div>
-        )}
-
-        {roomId && (
-          <div className="space-y-4">
-            {isHost ? (
-              <button
-                onClick={startScreenShare}
-                disabled={isSharing}
-                className={`w-full py-3 px-4 rounded-lg text-white font-medium transition-colors ${
-                  isSharing 
-                    ? 'bg-gray-400 cursor-not-allowed' 
-                    : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800'
-                }`}
-              >
-                {isSharing ? 'Condivisione in corso...' : 'Inizia a Condividere'}
-              </button>
-            ) : (
-              <video
-                id="viewer-video"
-                autoPlay
-                playsInline
-                className="w-full rounded-lg bg-gray-50"
-              />
-            )}
-          </div>
-        )}
-        
-        <div 
-          id="screen-share-container" 
-          className="mt-6 rounded-lg bg-gray-50 min-h-[200px] flex items-center justify-center"
-        >
-          {!isSharing && isHost && (
-            <p className="text-gray-500">
-              La condivisione apparirà qui
-            </p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default App;
