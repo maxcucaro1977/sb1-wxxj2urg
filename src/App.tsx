@@ -13,6 +13,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(true);
+  const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
 
   useEffect(() => {
     socket.on('connect', () => {
@@ -45,6 +46,9 @@ function App() {
       setRoomId(id);
       setIsHost(false);
       console.log('Unito alla stanza:', id);
+      if (!isHost) {
+        initializePeerConnection();
+      }
     });
 
     socket.on('room-not-found', () => {
@@ -52,11 +56,58 @@ function App() {
       console.log('Host non trovato');
     });
 
-    socket.on('stream-data', (stream) => {
+    socket.on('viewer-joined', async () => {
+      if (isHost) {
+        initializePeerConnection();
+      }
+    });
+
+    socket.on('ice-candidate', async (candidate) => {
+      try {
+        if (peerConnection) {
+          await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+      } catch (err) {
+        console.error('Errore nell\'aggiunta del candidato ICE:', err);
+      }
+    });
+
+    socket.on('offer', async (offer) => {
       if (!isHost) {
-        const videoElement = document.querySelector('#viewer-video') as HTMLVideoElement;
-        if (videoElement) {
-          videoElement.srcObject = stream;
+        try {
+          const pc = new RTCPeerConnection();
+          setPeerConnection(pc);
+
+          pc.ontrack = (event) => {
+            const videoElement = document.querySelector('#viewer-video') as HTMLVideoElement;
+            if (videoElement && event.streams[0]) {
+              videoElement.srcObject = event.streams[0];
+            }
+          };
+
+          pc.onicecandidate = (event) => {
+            if (event.candidate) {
+              socket.emit('ice-candidate', { roomId: FIXED_ROOM_ID, candidate: event.candidate });
+            }
+          };
+
+          await pc.setRemoteDescription(new RTCSessionDescription(offer));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          socket.emit('answer', { roomId: FIXED_ROOM_ID, answer });
+        } catch (err) {
+          console.error('Errore nella gestione dell\'offerta:', err);
+          setError('Errore nella connessione video');
+        }
+      }
+    });
+
+    socket.on('answer', async (answer) => {
+      if (isHost && peerConnection) {
+        try {
+          await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+        } catch (err) {
+          console.error('Errore nell\'impostazione della risposta:', err);
         }
       }
     });
@@ -68,152 +119,20 @@ function App() {
       socket.off('room-created');
       socket.off('joined-room');
       socket.off('room-not-found');
-      socket.off('stream-data');
+      socket.off('viewer-joined');
+      socket.off('ice-candidate');
+      socket.off('offer');
+      socket.off('answer');
+      if (peerConnection) {
+        peerConnection.close();
+      }
     };
-  }, [isHost]);
+  }, [isHost, peerConnection]);
 
-  const createRoom = () => {
-    if (!isConnected) {
-      setError('Non connesso al server');
-      return;
-    }
-    console.log('Richiesta creazione stanza');
-    socket.emit('create-room');
-  };
+  const initializePeerConnection = () => {
+    const pc = new RTCPeerConnection();
+    setPeerConnection(pc);
 
-  const joinRoom = () => {
-    if (!isConnected) {
-      setError('Non connesso al server');
-      return;
-    }
-    console.log('Richiesta unione alla stanza');
-    socket.emit('join-room', FIXED_ROOM_ID);
-  };
-
-  const startScreenShare = async () => {
-    try {
-      setError(null);
-      
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-        throw new Error('Il tuo browser non supporta la condivisione dello schermo');
-      }
-
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: false
-      });
-      
-      setIsSharing(true);
-      
-      const videoElement = document.createElement('video');
-      videoElement.srcObject = stream;
-      videoElement.autoplay = true;
-      videoElement.className = 'w-full rounded-lg';
-      
-      const container = document.getElementById('screen-share-container');
-      if (container) {
-        container.innerHTML = '';
-        container.appendChild(videoElement);
-      }
-
-      socket.emit('stream-data', { roomId: FIXED_ROOM_ID, stream });
-      
-      stream.getVideoTracks()[0].onended = () => {
-        setIsSharing(false);
-        if (container) {
-          container.innerHTML = '';
-        }
-      };
-    } catch (err) {
-      console.error('Errore:', err);
-      setError(err instanceof Error ? err.message : 'Si è verificato un errore');
-      setIsSharing(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl w-full">
-        <h1 className="text-2xl font-bold text-center mb-6">Screen Mirror</h1>
-        
-        <div className={`mb-4 p-4 rounded-lg ${
-          isConnecting ? 'bg-yellow-100 text-yellow-700' :
-          isConnected ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-        }`}>
-          {isConnecting ? 'Connessione al server in corso...' :
-           isConnected ? 'Connesso al server' : 'Non connesso al server'}
-        </div>
-
-        {error && (
-          <div className="mb-4 p-4 bg-red-100 text-red-700 rounded-lg">
-            {error}
-          </div>
-        )}
-
-        {!roomId && (
-          <div className="space-y-4">
-            <button
-              onClick={createRoom}
-              disabled={!isConnected}
-              className={`w-full py-3 px-4 rounded-lg text-white font-medium ${
-                isConnected ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800' : 'bg-gray-400 cursor-not-allowed'
-              }`}
-            >
-              Diventa Host
-            </button>
-            
-            <div className="flex space-x-2">
-              <button
-                onClick={joinRoom}
-                disabled={!isConnected}
-                className={`w-full py-2 px-4 rounded-lg text-white font-medium ${
-                  isConnected ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-400 cursor-not-allowed'
-                }`}
-              >
-                Unisciti come Spettatore
-              </button>
-            </div>
-          </div>
-        )}
-
-        {roomId && (
-          <div className="space-y-4">
-            {isHost ? (
-              <button
-                onClick={startScreenShare}
-                disabled={isSharing}
-                className={`w-full py-3 px-4 rounded-lg text-white font-medium transition-colors ${
-                  isSharing 
-                    ? 'bg-gray-400 cursor-not-allowed' 
-                    : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800'
-                }`}
-              >
-                {isSharing ? 'Condivisione in corso...' : 'Inizia a Condividere'}
-              </button>
-            ) : (
-              <video
-                id="viewer-video"
-                autoPlay
-                playsInline
-                className="w-full rounded-lg bg-gray-50"
-              />
-            )}
-          </div>
-        )}
-        
-        <div 
-          id="screen-share-container" 
-          className="mt-6 rounded-lg bg-gray-50 min-h-[200px] flex items-center justify-center"
-        >
-          {!isSharing && isHost && (
-            <p className="text-gray-500">
-              La condivisione apparirà qui
-            </p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default App;
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.emit('ice-candidate', { roomId: FIXED_ROOM_ID, candidate: event.candidate });
