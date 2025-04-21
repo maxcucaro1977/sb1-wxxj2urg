@@ -7,27 +7,18 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['vite.svg'],
       manifest: {
         name: 'Screen Mirror',
         short_name: 'Screen Mirror',
         description: 'Applicazione per la condivisione dello schermo',
         theme_color: '#ffffff',
-        background_color: '#ffffff',
-        display: 'standalone',
-        orientation: 'portrait',
         icons: [
           {
             src: 'vite.svg',
             sizes: '192x192',
-            type: 'image/svg+xml',
-            purpose: 'any maskable'
+            type: 'image/svg+xml'
           }
-        ],
-        capture_links: 'existing-client-only',
-        scope: '/',
-        start_url: '/',
-        prefer_related_applications: false
+        ]
       }
     })
   ],
