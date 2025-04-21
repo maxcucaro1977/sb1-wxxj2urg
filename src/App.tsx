@@ -5,7 +5,7 @@ import { VideoViewer } from './components/VideoViewer';
 import { useSocket } from './hooks/useSocket';
 import { useScreenShare } from './hooks/useScreenShare';
 
-function App() {
+const App = () => {
   const { socket, isConnected, isConnecting, error: socketError, reconnectAttempts } = useSocket();
   const { isSharing, error: shareError, startScreenShare } = useScreenShare(socket);
   const [isHost, setIsHost] = useState(false);
@@ -14,38 +14,39 @@ function App() {
   useEffect(() => {
     if (!socket) return;
 
-    socket.on('room-created', (id) => {
+    const handleRoomCreated = (id: string) => {
       setRoomId(id);
       setIsHost(true);
-    });
+    };
 
-    socket.on('joined-room', (id) => {
+    const handleRoomJoined = (id: string) => {
       setRoomId(id);
       setIsHost(false);
-    });
+    };
+
+    socket.on('room-created', handleRoomCreated);
+    socket.on('joined-room', handleRoomJoined);
 
     return () => {
-      socket.off('room-created');
-      socket.off('joined-room');
+      socket.off('room-created', handleRoomCreated);
+      socket.off('joined-room', handleRoomJoined);
     };
   }, [socket]);
 
-  const createRoom = () => {
+  const handleCreateRoom = () => {
     if (!socket || !isConnected) return;
     socket.emit('create-room');
   };
 
-  const joinRoom = () => {
+  const handleJoinRoom = () => {
     if (!socket || !isConnected) return;
     socket.emit('join-room');
   };
 
-  return (
-    <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl w-full">
-        <h1 className="text-2xl font-bold text-center mb-6">Screen Mirror</h1>
-        
-        <ConnectionStatus
-          isConnecting={isConnecting}
-          isConnected={isConnected}
-          reconnectAttempts={reconnectAttempts}
+  const renderConnectionError = () => {
+    if (!socketError && !shareError) return null;
+    return (
+      <div className="mb-4 p-4 bg-red-100 text-red-700 rounded-lg">
+        {socketError || shareError}
+      </div>
+    );
