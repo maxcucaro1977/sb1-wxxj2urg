@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 
+// Ensure we use the correct protocol and port for development
 const SOCKET_URL = import.meta.env.DEV 
-  ? `${window.location.protocol}//${window.location.hostname}:10000`
+  ? `ws://${window.location.hostname}:10000`
   : 'https://armony.onrender.com';
 
 export const useSocket = () => {
@@ -14,11 +15,12 @@ export const useSocket = () => {
 
   useEffect(() => {
     const newSocket = io(SOCKET_URL, {
-      transports: ['websocket', 'polling'],
+      transports: ['websocket'],
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       timeout: 10000,
-      autoConnect: false
+      autoConnect: false,
+      forceNew: true
     });
 
     newSocket.connect();
