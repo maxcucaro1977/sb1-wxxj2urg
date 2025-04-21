@@ -5,7 +5,12 @@ const SOCKET_URL = import.meta.env.DEV
   ? 'http://localhost:10000'  // Development server
   : 'https://armony.onrender.com'; // Production server
 
-const socket = io(SOCKET_URL);
+const socket = io(SOCKET_URL, {
+  transports: ['websocket', 'polling'], // Try WebSocket first, fallback to polling
+  reconnectionAttempts: 5, // Number of reconnection attempts
+  reconnectionDelay: 1000, // Time between reconnection attempts (ms)
+  timeout: 10000 // Connection timeout in milliseconds
+});
 
 const FIXED_ROOM_ID = '1121';
 
