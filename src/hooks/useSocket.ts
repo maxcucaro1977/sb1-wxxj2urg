@@ -2,18 +2,10 @@ import { useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 
 const SOCKET_URL = import.meta.env.DEV 
-  ? `${window.location.protocol}//${window.location.host}`
+  ? `${window.location.protocol}//${window.location.hostname}:10000`
   : 'https://armony.onrender.com';
 
-type SocketHook = {
-  socket: Socket | null;
-  isConnected: boolean;
-  isConnecting: boolean;
-  error: string | null;
-  reconnectAttempts: number;
-};
-
-export const useSocket = (): SocketHook => {
+export const useSocket = () => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(true);
@@ -26,8 +18,7 @@ export const useSocket = (): SocketHook => {
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
       timeout: 10000,
-      autoConnect: false,
-      withCredentials: false
+      autoConnect: false
     });
 
     newSocket.connect();
@@ -46,3 +37,29 @@ export const useSocket = (): SocketHook => {
       
       if (reconnectAttempts < 5) {
         setTimeout(() => {
+          setReconnectAttempts(prev => prev + 1);
+          newSocket.connect();
+        }, 1000 * Math.pow(2, reconnectAttempts));
+      }
+    });
+
+    newSocket.on('disconnect', () => {
+      setIsConnected(false);
+      setError('Disconnesso dal server');
+    });
+
+    setSocket(newSocket);
+
+    return () => {
+      newSocket.disconnect();
+    };
+  }, [reconnectAttempts]);
+
+  return {
+    socket,
+    isConnected,
+    isConnecting,
+    error,
+    reconnectAttempts
+  };
+}
