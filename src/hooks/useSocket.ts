@@ -21,3 +21,32 @@ export const useSocket = () => {
       autoConnect: false,
       withCredentials: false
     });
+
+    newSocket.connect();
+
+    newSocket.on('connect', () => {
+      setIsConnected(true);
+      setIsConnecting(false);
+      setError(null);
+      setReconnectAttempts(0);
+    });
+
+    newSocket.on('connect_error', (err) => {
+      setIsConnected(false);
+      setIsConnecting(false);
+      setError(`Errore di connessione: ${err.message}`);
+      
+      if (reconnectAttempts < 5) {
+        setTimeout(() => {
+          setReconnectAttempts(prev => prev + 1);
+          newSocket.connect();
+        }, 1000 * Math.pow(2, reconnectAttempts));
+      }
+    });
+
+    newSocket.on('disconnect', () => {
+      setIsConnected(false);
+      setError('Disconnesso dal server');
+    });
+
+    setSocket(newSocket);
