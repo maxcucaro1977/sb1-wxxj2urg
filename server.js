@@ -9,23 +9,12 @@ const __dirname = dirname(__filename);
 
 const app = express();
 const server = createServer(app);
-
-// Configurazione più robusta per Socket.IO
 const io = new Server(server, {
   cors: {
     origin: "*",
-    methods: ["GET", "POST"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: false
-  },
-  pingTimeout: 60000,
-  pingInterval: 25000,
-  transports: ['websocket'],
-  allowEIO3: true
+    methods: ["GET", "POST"]
+  }
 });
-
-// Serve i file statici dalla cartella dist
-app.use(express.static(join(__dirname, 'dist')));
 
 const FIXED_ROOM_ID = '1121';
 let hostSocket = null;
@@ -72,19 +61,9 @@ io.on('connection', (socket) => {
       console.log('Host disconnesso dalla stanza permanente');
     }
   });
-
-  // Gestione errori del socket
-  socket.on('error', (error) => {
-    console.error('Errore socket:', error);
-  });
 });
 
-// Gestisce tutte le altre richieste servendo index.html
-app.get('*', (req, res) => {
-  res.sendFile(join(__dirname, 'dist', 'index.html'));
-});
-
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server avviato sulla porta ${PORT}`);
   console.log(`Stanza permanente creata con ID: ${FIXED_ROOM_ID}`);
